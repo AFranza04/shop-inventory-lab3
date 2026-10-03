@@ -1,14 +1,15 @@
 package edu.cit.franza.inventory;
 
-import edu.cit.franza.events.LowStock;
-import edu.cit.franza.inventory.model.InventoryItem;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
+import edu.cit.franza.events.LowStock;
+import edu.cit.franza.inventory.model.InventoryItem;
 
 /**
  * Package-private on purpose. This class - and the repository it uses -
@@ -82,7 +83,7 @@ class InventoryServiceImpl implements InventoryService {
         item.setStock(item.getStock() - quantity);
         InventoryItem saved = inventoryRepository.save(item);
 
-        if (saved.getStock() < lowStockThreshold) {
+        if (saved.getStock() <= lowStockThreshold) {
             eventPublisher.publishEvent(new LowStock(saved.getProductId(), saved.getName(), saved.getStock()));
         }
 

@@ -1,11 +1,12 @@
 package edu.cit.franza.notification;
 
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+
 import edu.cit.franza.events.LowStock;
 import edu.cit.franza.events.OrderPlaced;
 import edu.cit.franza.events.OrderRejected;
 import edu.cit.franza.supplier.SupplierGateway;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
 
 /**
  * Package-private: an implementation detail wired up purely through
@@ -27,9 +28,13 @@ import org.springframework.stereotype.Component;
 class NotificationListener {
 
     private final NotificationRepository notificationRepository;
+    private final SupplierGateway supplierGateway;
 
-    NotificationListener(NotificationRepository notificationRepository) {
+    public NotificationListener(
+            NotificationRepository notificationRepository, 
+            SupplierGateway supplierGateway) {
         this.notificationRepository = notificationRepository;
+        this.supplierGateway = supplierGateway;
     }
 
     @EventListener
@@ -47,10 +52,9 @@ class NotificationListener {
     }
 
     @EventListener
-    void onLowStock(LowStock event) {
-        notificationRepository.save(new NotificationEntity(
-                NotificationType.LOW_STOCK,
-                "Reorder needed: " + event.productName() + " (" + event.productId()
-                        + ") is down to " + event.currentStock() + " in stock"));
+    public void handleLowStock(LowStock event) {
+
+        int unitsToReorder = 50;
+        supplierGateway.placeReorder(event.productId(), unitsToReorder);
     }
 }

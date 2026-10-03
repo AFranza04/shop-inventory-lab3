@@ -1,6 +1,7 @@
 package edu.cit.franza.supplier;
 
-import edu.cit.franza.inventory.InventoryService;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -8,7 +9,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import edu.cit.franza.inventory.InventoryService;
 
 @Component
 class SupplierOrderScheduler {
@@ -26,55 +27,78 @@ class SupplierOrderScheduler {
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
-        // Read catalog on startup to fulfill verify criterion
-        client.fetchCatalog();
+        try {
+            client.fetchCatalog();
+        } catch (Exception e) {
+            log.warn("Could not fetch catalog on startup: {}", e.getMessage());
+        }
     }
 
-    // Part D: Retry pending orders blocked by outages (every 30 seconds)
-    @Scheduled(fixedDelay = 30000)
+    @Scheduled(fixedDelay = 15000)
     public void retryPendingOrders() {
         List<SupplierOrder> pending = repo.findByStatusIn(List.of(SupplierOrderStatus.PENDING));
         for (SupplierOrder order : pending) {
             try {
+                log.info("Retrying blocked/pending order ID {} (BuyerRef: {})", order.getId(), order.getBuyerRef());
                 PurchaseOrderXml req = new PurchaseOrderXml("ZCV-3857", order.getCases(), order.getBuyerRef());
                 PurchaseOrderAckXml ack = client.submitOrder(req, order.getRequestId());
+                
                 if (ack != null && ack.poNumber != null) {
                     order.setPoNumber(ack.poNumber);
                     order.setStatus(SupplierOrderStatus.SUBMITTED);
                     repo.save(order);
+                    log.info("Pending order successfully placed with PO Number: {}", ack.poNumber);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                log.warn("Retry failed for order {}: {}. Will retry next cycle.", order.getId(), e.getMessage());
+            }
         }
     }
 
-    // Part E: Poll status of open orders every 25 seconds
-    @Scheduled(fixedDelay = 25000)
+    @Scheduled(fixedDelay = 20000)
     public void pollOpenOrders() {
-        List<SupplierOrder> active = repo.findByStatusIn(List.of(SupplierOrderStatus.SUBMITTED, SupplierOrderStatus.PROCESSING, SupplierOrderStatus.SHIPPED));
+        List<SupplierOrder> active = repo.findByStatusIn(List.of(
+            SupplierOrderStatus.SUBMITTED, 
+            SupplierOrderStatus.PROCESSING, 
+            SupplierOrderStatus.SHIPPED
+        ));
+
         for (SupplierOrder order : active) {
             if (order.getPoNumber() == null) continue;
             try {
+                // Throttle status checks to stay within LegacySupply rate limits
+                Thread.sleep(1500);
+
                 PurchaseOrderStatusXml statusXml = client.checkStatus(order.getPoNumber());
                 if (statusXml == null || statusXml.statusCode == null) continue;
 
-                switch (statusXml.statusCode) {
+                String code = statusXml.statusCode.trim();
+
+                switch (code) {
                     case "10" -> order.setStatus(SupplierOrderStatus.SUBMITTED);
                     case "20" -> order.setStatus(SupplierOrderStatus.PROCESSING);
                     case "30" -> order.setStatus(SupplierOrderStatus.SHIPPED);
                     case "40" -> {
                         order.setStatus(SupplierOrderStatus.DELIVERED);
                         repo.save(order);
-                        log.info("Order {} delivered! Restocking {} units of product {}", order.getPoNumber(), order.getUnits(), order.getProductId());
+                        log.info("Order {} DELIVERED! Restocking {} units of product {}", 
+                                order.getPoNumber(), order.getUnits(), order.getProductId());
                         inventoryService.restock(order.getProductId(), order.getUnits());
+                        continue;
                     }
                     case "90", "CANCELLED" -> {
                         order.setStatus(SupplierOrderStatus.CANCELLED);
                         repo.save(order);
-                        log.warn("Order {} was cancelled by supplier", order.getPoNumber());
+                        log.warn("Order {} was CANCELLED by LegacySupply", order.getPoNumber());
+                        continue;
                     }
-                    default -> log.warn("Unrecognized status code: {}", statusXml.statusCode);
+                    default -> log.warn("Unrecognized status code for PO {}: '{}'", order.getPoNumber(), code);
                 }
+
                 repo.save(order);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
             } catch (Exception e) {
                 log.warn("Error polling PO {}: {}", order.getPoNumber(), e.getMessage());
             }

@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * edu.cit.franza.inventory (Inventory module) without any extra config.
  */
 @SpringBootApplication
+@EnableScheduling
 public class ShopApplication {
 
     public static void main(String[] args) {
