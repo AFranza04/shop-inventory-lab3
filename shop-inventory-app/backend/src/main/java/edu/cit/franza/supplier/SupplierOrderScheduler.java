@@ -8,6 +8,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 
 import edu.cit.franza.inventory.InventoryService;
 
@@ -95,6 +96,11 @@ class SupplierOrderScheduler {
                     default -> log.warn("Unrecognized status code for PO {}: '{}'", order.getPoNumber(), code);
                 }
 
+                repo.save(order);
+            } catch (HttpClientErrorException.NotFound e) {
+                // Catches 404 (E-PO-04: Order not found) when a cancelled order is purged or rejected
+                log.warn("Order {} returned 404 (E-PO-04). Marking as CANCELLED.", order.getPoNumber());
+                order.setStatus(SupplierOrderStatus.CANCELLED);
                 repo.save(order);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
