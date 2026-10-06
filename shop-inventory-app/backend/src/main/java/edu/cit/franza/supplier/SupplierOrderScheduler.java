@@ -80,13 +80,13 @@ class SupplierOrderScheduler {
                     case "20" -> order.setStatus(SupplierOrderStatus.PROCESSING);
                     case "30" -> order.setStatus(SupplierOrderStatus.SHIPPED);
                     case "40" -> {
-                        order.setStatus(SupplierOrderStatus.DELIVERED);
-                        repo.save(order);
-                        log.info("Order {} DELIVERED! Restocking {} units of product {}", 
-                                order.getPoNumber(), order.getUnits(), order.getProductId());
-                        inventoryService.restock(order.getProductId(), order.getUnits());
-                        continue;
-                    }
+                          order.setStatus(SupplierOrderStatus.DELIVERED);
+                          repo.save(order);
+                          log.info("Order {} DELIVERED! Restocking {} units of product {}", 
+                                   order.getPoNumber(), order.getUnits(), order.getProductId());
+                          inventoryService.restock(order.getProductId(), order.getUnits());
+                          continue;
+                      }
                     case "90", "CANCELLED" -> {
                         order.setStatus(SupplierOrderStatus.CANCELLED);
                         repo.save(order);

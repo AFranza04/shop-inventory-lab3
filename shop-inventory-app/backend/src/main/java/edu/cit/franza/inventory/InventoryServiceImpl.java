@@ -9,27 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import edu.cit.franza.events.LowStock;
+import edu.cit.franza.events.StockChangedEvent;
 import edu.cit.franza.inventory.model.InventoryItem;
 
-/**
- * Package-private on purpose. This class - and the repository it uses -
- * are implementation details of the inventory module. Because it has no
- * access modifier, code outside edu.cit.franza.inventory cannot import it,
- * declare a variable of this type, or autowire it directly, even though
- * it's a Spring bean. Other modules (namely edu.cit.franza.shop) can only
- * ever obtain a reference to it through the public InventoryService
- * interface, via constructor injection - Spring is happy to inject a
- * package-private bean into anything that asks for its public interface
- * type, because the wiring happens through reflection, not compiled
- * source references. See README section 2 for what breaks if this class
- * is made public instead.
- *
- * Publishes LowStock events directly (via ApplicationEventPublisher)
- * rather than calling the Notification module - this keeps Inventory
- * decoupled from Notification exactly the same way Order is: Inventory
- * only ever imports the neutral edu.cit.franza.events package, never
- * edu.cit.franza.notification.
- */
 @Service
 class InventoryServiceImpl implements InventoryService {
 
@@ -83,6 +65,9 @@ class InventoryServiceImpl implements InventoryService {
         item.setStock(item.getStock() - quantity);
         InventoryItem saved = inventoryRepository.save(item);
 
+        // Publish event for Tiangge channel synchronization
+        eventPublisher.publishEvent(new StockChangedEvent(saved.getProductId(), saved.getStock()));
+
         if (saved.getStock() <= lowStockThreshold) {
             eventPublisher.publishEvent(new LowStock(saved.getProductId(), saved.getName(), saved.getStock()));
         }
@@ -97,6 +82,9 @@ class InventoryServiceImpl implements InventoryService {
                 .orElseThrow(() -> new IllegalStateException(
                         "Cannot restock unknown product: " + productId));
         item.setStock(item.getStock() + quantity);
-        inventoryRepository.save(item);
+        InventoryItem saved = inventoryRepository.save(item);
+
+        // Publish event for Tiangge channel synchronization
+        eventPublisher.publishEvent(new StockChangedEvent(saved.getProductId(), saved.getStock()));
     }
 }

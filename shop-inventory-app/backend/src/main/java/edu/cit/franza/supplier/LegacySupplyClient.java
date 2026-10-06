@@ -8,6 +8,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
+import edu.cit.franza.config.InstanceContext;
 
 @Component
 class LegacySupplyClient {
@@ -22,9 +23,11 @@ class LegacySupplyClient {
     @Value("${LS_API_KEY:LSK-D9375FEBAEC2E6E9D356}")
     private String apiKey;
 
+    private final InstanceContext instanceContext;
     private String sessionToken;
 
-    LegacySupplyClient() {
+    LegacySupplyClient(InstanceContext instanceContext) {
+        this.instanceContext = instanceContext;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(3000);
@@ -36,6 +39,7 @@ class LegacySupplyClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_XML);
+        headers.set("X-Client-Instance", instanceContext.getInstanceId());
         HttpEntity<AuthRequestXml> req = new HttpEntity<>(new AuthRequestXml(clientId, apiKey), headers);
 
         try {
@@ -61,6 +65,7 @@ class LegacySupplyClient {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-LS-Session", getSessionToken());
+            headers.set("X-Client-Instance", instanceContext.getInstanceId());
             restTemplate.exchange(baseUrl + "/catalog", HttpMethod.GET, new HttpEntity<>(headers), String.class);
         } catch (Exception e) {
             log.warn("Catalog ping check: {}", e.getMessage());
@@ -78,6 +83,7 @@ class LegacySupplyClient {
                 headers.setContentType(MediaType.APPLICATION_XML);
                 headers.set("X-LS-Session", getSessionToken());
                 headers.set("X-Request-Id", requestId);
+                headers.set("X-Client-Instance", instanceContext.getInstanceId());
 
                 HttpEntity<PurchaseOrderXml> entity = new HttpEntity<>(order, headers);
                 ResponseEntity<PurchaseOrderAckXml> resp = restTemplate.postForEntity(
@@ -106,6 +112,7 @@ class LegacySupplyClient {
     PurchaseOrderStatusXml checkStatus(String poNumber) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-LS-Session", getSessionToken());
+        headers.set("X-Client-Instance", instanceContext.getInstanceId());
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {

@@ -1,10 +1,12 @@
 package edu.cit.franza.supplier;
 
-import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
-import java.util.Optional;
 
-interface SupplierOrderRepository extends JpaRepository<SupplierOrder, Long> {
-    Optional<SupplierOrder> findByBuyerRef(String buyerRef);
+import org.springframework.data.repository.CrudRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface SupplierOrderRepository extends CrudRepository<SupplierOrder, Long> {
+    List<SupplierOrder> findAll();
     List<SupplierOrder> findByStatusIn(List<SupplierOrderStatus> statuses);
 }
